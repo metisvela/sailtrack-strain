@@ -1,3 +1,0 @@
-[submodule "lib/sailtrack-sensor"]
-	path = lib/sailtrack-sensor
-	url = https://github.com/metis-vela-unipd/sailtrack-sensor.git
