@@ -1,2 +1,2 @@
 # SailTrack Strain
-Repository containing the code of the strain module of the SailTrack system.
+Module of the SailTrack system for measuring the forces acting on the boat maneuvers.
