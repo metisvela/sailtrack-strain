@@ -2,7 +2,6 @@
 #include <SailtrackModule.h>
 #include <HX711.h>
 
-
 // -------------------------- Configuration -------------------------- //
 
 #define MQTT_PUBLISH_FREQ_HZ		5
@@ -16,8 +15,10 @@
 
 #define HX711_DOUT_PIN				25
 #define HX711_SCK_PIN				27
-#define LOADCELL_OFFSET 			50682624
-#define LOADCELL_DIVIDER			5895655
+// TODO: Adjust value
+#define LOADCELL_BASE_LOAD_KG		36.1 
+#define LOADCELL_NUM_READING		32
+1241.496
 
 #define LOOP_TASK_INTERVAL_MS		1000 / MQTT_PUBLISH_FREQ_HZ
 
@@ -40,16 +41,23 @@ class ModuleCallbacks: public SailtrackModuleCallbacks {
 
 
 void setup() {
-  stm.begin("strain", IPAddress(192, 168, 103, 105), new ModuleCallbacks());
-  hx.begin(HX711_DOUT_PIN, HX711_SCK_PIN);
-//   hx.set_scale(LOADCELL_DIVIDER);
-//   hx.set_offset(LOADCELL_OFFSET);
+	stm.begin("strain", IPAddress(192, 168, 42, 105), new ModuleCallbacks());
+	hx.begin(HX711_DOUT_PIN, HX711_SCK_PIN);
+	hx.set_scale();
+	hx.tare();
+	digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
+	delay(30000);
+	digitalWrite(STM_NOTIFICATION_LED_PIN, HIGH);
+	long reading = hx.get_units(10);
+	log_printf("Calibration factor: %ld/%.1f=%.3f\n", reading, LOADCELL_BASE_LOAD_KG, reading/LOADCELL_BASE_LOAD_KG);
+	hx.set_scale(reading/LOADCELL_BASE_LOAD_KG);
 }
 
 void loop() {
 	TickType_t lastWakeTime = xTaskGetTickCount();
 	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;
-	doc["load"] = hx.read_average(10);
+	long val = hx.get_units();
+	doc["load"] = val;
 	stm.publish("sensor/strain0", doc.as<JsonObjectConst>());
 	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(LOOP_TASK_INTERVAL_MS));
 }
