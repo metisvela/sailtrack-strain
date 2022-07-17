@@ -16,15 +16,17 @@
 #define HX711_DOUT_PIN				25
 #define HX711_SCK_PIN				27
 // TODO: Adjust value
-#define LOADCELL_BASE_LOAD_KG		36.1 
+//taken from grafana, so no more
+//#define LOADCELL_BASE_LOAD_KG		36.1 
 #define LOADCELL_NUM_READING		32
-1241.496
+//divider:1241.496
 
 #define LOOP_TASK_INTERVAL_MS		1000 / MQTT_PUBLISH_FREQ_HZ
 
 // ------------------------------------------------------------------- //
 
 SailtrackModule stm;
+//libreria per la comunicazione tra codice-amp-cella_di_carico
 HX711 hx;
 
 class ModuleCallbacks: public SailtrackModuleCallbacks {
@@ -42,22 +44,42 @@ class ModuleCallbacks: public SailtrackModuleCallbacks {
 
 void setup() {
 	stm.begin("strain", IPAddress(192, 168, 42, 105), new ModuleCallbacks());
-	hx.begin(HX711_DOUT_PIN, HX711_SCK_PIN);
-	hx.set_scale();
-	hx.tare();
-	digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
-	delay(30000);
-	digitalWrite(STM_NOTIFICATION_LED_PIN, HIGH);
-	long reading = hx.get_units(10);
-	log_printf("Calibration factor: %ld/%.1f=%.3f\n", reading, LOADCELL_BASE_LOAD_KG, reading/LOADCELL_BASE_LOAD_KG);
-	hx.set_scale(reading/LOADCELL_BASE_LOAD_KG);
+	
 }
 
 void loop() {
+	calibration(36.1);
+	
+}
+
+void calibration(int load_kg){
+	int calibration_factor,load;
 	TickType_t lastWakeTime = xTaskGetTickCount();
 	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;
-	long val = hx.get_units();
-	doc["load"] = val;
+	hx.begin(HX711_DOUT_PIN, HX711_SCK_PIN);
+	hx.set_scale();
+	//set offset a tare weight
+	hx.tare();
+	//initiate calibration
+	digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
+	//30 seconds to attach the load cell shroud
+	delay(30000);
+	digitalWrite(STM_NOTIFICATION_LED_PIN, HIGH);
+	//takes the average based on 10 reading
+	long reading = hx.get_units(10);
+	if(load_kg==0)
+		load=0;
+	else
+	{
+	calibration_factor=reading/load_kg;
+	log_printf("Calibration factor: %ld/%.1f=%.3f\n", reading, load_kg, calibration_factor);
+	hx.set_scale(calibration_factor);
+	load=reading/calibration_factor;
+	////////////////????????////////////////
+	//doc["load"] = val;
+	}
+	//it gives the weight measured
+	doc["load"]=load;
 	stm.publish("sensor/strain0", doc.as<JsonObjectConst>());
 	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(LOOP_TASK_INTERVAL_MS));
 }
