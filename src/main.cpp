@@ -1,8 +1,9 @@
 #include <Arduino.h>
 #include <SailtrackModule.h>
 #include <HX711.h>
-
+#include <EEPROM.h>
 // -------------------------- Configuration -------------------------- //
+#define EEPROM_SIZE					4096
 
 #define MQTT_PUBLISH_FREQ_HZ		5
 
@@ -22,6 +23,8 @@
 //passed by grafana if diffent
 #define DEFAULT_TIME				30000
 #define g							9.80
+#define DEFAULT_OFFSET				-31000
+#define DEFAULT_DIVIDER				1
 #define LOOP_TASK_INTERVAL_MS		1000 / MQTT_PUBLISH_FREQ_HZ
 
 //WEIGHT= (val-OFFSET)/DIVIDER
@@ -33,6 +36,7 @@ HX711 hx;
 bool cal_status=false;
 int cal_time;
 int load_kg;
+long default_offset;
 void read_data();
 void calibration(int load_kg=0, int cal_time=DEFAULT_TIME);
 class ModuleCallbacks: public SailtrackModuleCallbacks {
@@ -48,8 +52,8 @@ class ModuleCallbacks: public SailtrackModuleCallbacks {
 	//parso il json per prendere peso e tempo per la calibrazione
 	/*void onMqttMessage(const char * topic,JsonObject payload) {
 		if(strcmp(topic,"sensor/strain0/calibration")){
-			stm.subscribe("sensor/strain0/calibration");
 			StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;
+			//non serve deserialize
 			deserializeJson(doc,payload);
 			//come sono i mex mqtt??
 			load_kg=doc["load"];
@@ -62,31 +66,45 @@ class ModuleCallbacks: public SailtrackModuleCallbacks {
 
 
 void setup() {
-	stm.begin("strain", IPAddress(192, 168, 1, 10), new ModuleCallbacks());
+	stm.begin("strain", IPAddress(192, 168, 42, 105), new ModuleCallbacks());
+	//stm.subscribe("sensor/strain0/calibration");
+	hx.begin(HX711_DOUT_PIN,HX711_SCK_PIN);	
+	//iscrizione serve solo per la ricezione di dati
+	
+	//default_offset=hx.get_units(LOADCELL_NUM_READING);
 }
 
 void loop() {
-	if(cal_status)
+	if(!cal_status){
 		calibration(36.1,60);
-	else
+		cal_status=true;
+	}
+	//else
 		//altrimenti leggo i dati dall'amp e li spedisco nel relativo topic
-		read_data();
-
+		//read_data();
 }
 void read_data(){	
 	TickType_t lastWakeTime = xTaskGetTickCount();
 	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;
 	long reading = hx.get_units(LOADCELL_NUM_READING);
 	doc["raw_data"]=reading;
+	int load=(reading-default_offset)/DEFAULT_DIVIDER;
+	//int load=(reading-reading)/DEFAULT_DIVIDER;
+	doc["load_kg"]=load;
+	doc["load_newton"]=load*g;
+	doc["offset"]=DEFAULT_OFFSET;
+	doc["divider"]=DEFAULT_DIVIDER;	
 	stm.publish("sensor/strain0", doc.as<JsonObjectConst>());	
 	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(LOOP_TASK_INTERVAL_MS));
+}
+void writeMemory(){
+	EEPROM.begin(EEPROM_SIZE);
 }
 void calibration(int load_kg, int cal_time){
 	TickType_t lastWakeTime = xTaskGetTickCount();
 	int divider,load;
 	long reading, offset;	
 	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> cal;
-	hx.begin(HX711_DOUT_PIN, HX711_SCK_PIN);
 	hx.set_scale();
 	hx.tare();
 	//offset is the average value now measured
@@ -109,7 +127,7 @@ void calibration(int load_kg, int cal_time){
 	divider=reading/load_kg;
 	log_printf("Divider: %ld/%.1f=%.3f\n", reading, load_kg, divider);
 	hx.set_scale(divider);
-	load=reading-offset/divider;
+	load=(reading-offset)/divider;
 	}	
 	
 	//data measured by the loadcell
@@ -118,9 +136,9 @@ void calibration(int load_kg, int cal_time){
 	cal["load_kg"]=load;
 	cal["load_newton"]=load*g;
 	//calibration factor 
-	cal["divider"]=divider;
 	cal["offset"]=offset;
+	cal["divider"]=divider;	
 	stm.publish("sensor/strain0/calibration", cal.as<JsonObjectConst>());
-	cal_status=false;	
+	//cal_status=true;
 	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(LOOP_TASK_INTERVAL_MS));
 }
