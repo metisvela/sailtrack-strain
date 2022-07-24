@@ -20,11 +20,10 @@
 //taken from grafana, so no more
 //#define LOADCELL_BASE_LOAD_KG		36.1 
 #define LOADCELL_NUM_READING		10
-//passed by grafana if diffent
+//passed by grafana if different
 #define DEFAULT_TIME				30000
+#define DEFAULT_LOAD				0
 #define g							9.80
-#define DEFAULT_OFFSET				-31000
-#define DEFAULT_DIVIDER				1
 #define LOOP_TASK_INTERVAL_MS		1000 / MQTT_PUBLISH_FREQ_HZ
 
 //WEIGHT= (val-OFFSET)/DIVIDER
@@ -35,9 +34,9 @@ SailtrackModule stm;
 HX711 hx;
 bool cal_status=false;
 
-double divider;
+double divider,in_load=DEFAULT_LOAD;
 long int offset;
-int address=0;
+int address=0, cal_time=DEFAULT_TIME;
 void read_data();
 void calibration(double in_load=0, int cal_time=DEFAULT_TIME);
 class ModuleCallbacks: public SailtrackModuleCallbacks {
@@ -51,21 +50,23 @@ class ModuleCallbacks: public SailtrackModuleCallbacks {
 		battery["voltage"] = 2 * avg / BATTERY_ADC_RESOLUTION * BATTERY_ESP32_REF_VOLTAGE * BATTERY_ADC_REF_VOLTAGE;
 	}
 	//parso il json per prendere peso e tempo per la calibrazione
-	/*void onMqttMessage(const char * topic,JsonObject payload) {
+	void onMqttMessage(const char * topic,JsonObject payload) {
 		if(strcmp(topic,"sensor/strain0/calibration")){
-			StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;
-			//non serve deserialize
-			deserializeJson(doc,payload);
-			//come sono i mex mqtt??
-			load_kg=doc["load"];
-			cal_time=doc["time"];
+			in_load=payload["load"];
+			cal_time=payload["time"];
 			cal_status=true;
 		}
-	}*/
+	}
 
 };
 
-
+void readMemory()
+{
+	EEPROM.get(address,offset);
+	address+=sizeof(offset);
+	EEPROM.get(address,divider);
+	address=0;
+}
 void setup() {
 	stm.begin("strain", IPAddress(192, 168, 1, 243), new ModuleCallbacks());	
 	EEPROM.begin(EEPROM_SIZE);
@@ -74,14 +75,11 @@ void setup() {
 	//iscrizione serve solo per la ricezione di dati	
 	Serial.begin(115200);	
 	Serial.println("setup");
-	//default_offset=hx.get_units(LOADCELL_NUM_READING);
-	EEPROM.get(address,offset);
-	address+=sizeof(offset);
-	EEPROM.get(address,divider);
-	address=0;
+	
 }
 
 void loop() {
+
 	calibration(3);
 	
 }
@@ -90,20 +88,15 @@ void read_data(){
 	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;
 	long reading = hx.get_units(LOADCELL_NUM_READING);
 	doc["raw_data"]=reading;
-	int load=(reading-0)/DEFAULT_DIVIDER;
+	readMemory();
+	int load=(reading-0)/divider;
 	//int load=(reading-reading)/DEFAULT_DIVIDER;
 	doc["load_kg"]=load;
 	doc["load_newton"]=load*g;
-	doc["offset"]=DEFAULT_OFFSET;
-	doc["divider"]=DEFAULT_DIVIDER;	
+	doc["offset"]=offset;
+	doc["divider"]=divider;	
 	stm.publish("sensor/strain0", doc.as<JsonObjectConst>());	
 	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(LOOP_TASK_INTERVAL_MS));
-}
-void writeMemory(){
-	/*
-	address0: offset
-	address1: divider
-	*/
 }
 void calibration(double in_load, int cal_time){
 	TickType_t lastWakeTime = xTaskGetTickCount();
@@ -114,6 +107,8 @@ void calibration(double in_load, int cal_time){
 	hx.tare(LOADCELL_NUM_READING);
 	//offset is the average value now measured
 	offset=hx.get_units(LOADCELL_NUM_READING);
+	EEPROM.put(address,offset);
+	address+=sizeof(offset);
 	//initiate calibration
 	digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
 
@@ -135,6 +130,8 @@ void calibration(double in_load, int cal_time){
 	else
 	{
 	divider=reading/in_load;
+	EEPROM.put(address,divider);
+	address=0;
 	//log_printf("Divider: %ld/%.1f=%.3f\n", reading, load_kg, divider);
 	hx.set_scale(divider);
 	out_load=(reading-offset)/divider;
