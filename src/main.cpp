@@ -2,8 +2,9 @@
 #include <SailtrackModule.h>
 #include <HX711.h>
 #include <EEPROM.h>
+#include <stdint.h>
 // -------------------------- Configuration -------------------------- //
-#define EEPROM_SIZE					4096
+#define EEPROM_SIZE					12
 
 #define MQTT_PUBLISH_FREQ_HZ		5
 
@@ -32,7 +33,7 @@
 SailtrackModule stm;
 //libreria per la comunicazione tra codice-amp-cella_di_carico
 HX711 hx;
-bool cal_status=false;
+bool cal_status=true;
 
 double divider,in_load=DEFAULT_LOAD;
 long int offset;
@@ -64,7 +65,18 @@ void readMemory()
 {
 	EEPROM.get(address,offset);
 	address+=sizeof(offset);
+	Serial.println(sizeof(offset));
+	Serial.println(sizeof(divider));
 	EEPROM.get(address,divider);
+	address=0;
+}
+void writeMemory()
+{
+	address=0;
+	EEPROM.put(address,offset);
+	address+=sizeof(offset);	
+	EEPROM.put(address,divider);
+	EEPROM.commit();
 	address=0;
 }
 void setup() {
@@ -80,16 +92,22 @@ void setup() {
 
 void loop() {
 
-	calibration(3);
+	if(cal_status){
+		calibration(in_load,cal_time);
+		cal_status=false;
+	}
+	else
+		read_data();
 	
 }
 void read_data(){	
+	Serial.println("lettura dati");
 	TickType_t lastWakeTime = xTaskGetTickCount();
 	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;
 	long reading = hx.get_units(LOADCELL_NUM_READING);
 	doc["raw_data"]=reading;
 	readMemory();
-	int load=(reading-0)/divider;
+	int load=(reading-offset)/divider;
 	//int load=(reading-reading)/DEFAULT_DIVIDER;
 	doc["load_kg"]=load;
 	doc["load_newton"]=load*g;
@@ -99,6 +117,7 @@ void read_data(){
 	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(LOOP_TASK_INTERVAL_MS));
 }
 void calibration(double in_load, int cal_time){
+	Serial.println("inizio calibrazione");
 	TickType_t lastWakeTime = xTaskGetTickCount();
 	double out_load;
 	long int reading;
@@ -107,8 +126,6 @@ void calibration(double in_load, int cal_time){
 	hx.tare(LOADCELL_NUM_READING);
 	//offset is the average value now measured
 	offset=hx.get_units(LOADCELL_NUM_READING);
-	EEPROM.put(address,offset);
-	address+=sizeof(offset);
 	//initiate calibration
 	digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
 
@@ -130,8 +147,6 @@ void calibration(double in_load, int cal_time){
 	else
 	{
 	divider=reading/in_load;
-	EEPROM.put(address,divider);
-	address=0;
 	//log_printf("Divider: %ld/%.1f=%.3f\n", reading, load_kg, divider);
 	hx.set_scale(divider);
 	out_load=(reading-offset)/divider;
@@ -141,7 +156,7 @@ void calibration(double in_load, int cal_time){
 	Serial.println(out_load);
 	Serial.println("fine calibrazione");
 	}	
-	
+	writeMemory();
 	//data measured by the loadcell
 	cal["raw_data"]=reading;
 	//it gives the weight measured
