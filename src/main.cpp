@@ -2,8 +2,9 @@
 #include <SailtrackModule.h>
 #include <HX711.h>
 #include <EEPROM.h>
+#include <stdint.h>
+
 // -------------------------- Configuration -------------------------- //
-#define EEPROM_SIZE					4096
 
 #define MQTT_PUBLISH_FREQ_HZ		5
 
@@ -16,29 +17,38 @@
 
 #define HX711_DOUT_PIN				25
 #define HX711_SCK_PIN				27
+#define HX711_NUM_READING			1
+
 // TODO: Adjust value
 //taken from grafana, so no more
 //#define LOADCELL_BASE_LOAD_KG		36.1 
-#define LOADCELL_NUM_READING		10
-//passed by grafana if diffent
-#define DEFAULT_TIME				30000
-#define g							9.80
-#define DEFAULT_OFFSET				-31000
-#define DEFAULT_DIVIDER				1
+//passed by grafana if different
+
 #define LOOP_TASK_INTERVAL_MS		1000 / MQTT_PUBLISH_FREQ_HZ
 
-//WEIGHT= (val-OFFSET)/DIVIDER
+#define EEPROM_ALLOC_SIZE_BYTES		512
+#define EEPROM_CAL_SIZE_BYTES		2+sizeof(long)+sizeof(float)+2
+#define EEPROM_CAL_ADDR				42
+#define EEPROM_CAL_ID_0				0x30
+#define EEPROM_CAL_ID_1				0x55
+
+#define CAL_TARE_DELAY_S			10
+#define CAL_NUM_READINGS			10
+#define	CAL_SCALE_DELAY_S			10
+#define CAL_TARE_LED_DELAY_MS		500
+#define CAL_SCALE_LED_DELAY_MS		200
+#define CAL_NUM_TRIES				5
+#define CAL_TRIES_DELAY_MS			500
+#define CAL_ERROR_LED_DELAY_MS		150		
 // ------------------------------------------------------------------- //
 
 SailtrackModule stm;
-//libreria per la comunicazione tra codice-amp-cella_di_carico
 HX711 hx;
-bool cal_status=false;
-int cal_time;
-int load_kg;
-long default_offset;
-void read_data();
-void calibration(int load_kg=0, int cal_time=DEFAULT_TIME);
+
+bool calibration;
+int calibrationTries=CAL_NUM_TRIES;
+int calibrationScaleDelay;
+float calibrationLoad;
 class ModuleCallbacks: public SailtrackModuleCallbacks {
 	void onStatusPublish(JsonObject status) {
 		JsonObject battery = status.createNestedObject("battery");
@@ -50,95 +60,140 @@ class ModuleCallbacks: public SailtrackModuleCallbacks {
 		battery["voltage"] = 2 * avg / BATTERY_ADC_RESOLUTION * BATTERY_ESP32_REF_VOLTAGE * BATTERY_ADC_REF_VOLTAGE;
 	}
 	//parso il json per prendere peso e tempo per la calibrazione
-	/*void onMqttMessage(const char * topic,JsonObject payload) {
-		if(strcmp(topic,"sensor/strain0/calibration")){
-			StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;
-			//non serve deserialize
-			deserializeJson(doc,payload);
-			//come sono i mex mqtt??
-			load_kg=doc["load"];
-			cal_time=doc["time"];
-			cal_status=true;
-		}
-	}*/
+	void onMqttMessage(const char * topic,JsonObject payload) {
+		calibrationLoad=payload["calibrationLoad"];
+		calibrationScaleDelay=payload["calibrationScaleDelay"]?payload["calibrationScaleDelay"]:CAL_SCALE_DELAY_S;
+		calibration=true;
+	}
 
 };
+//to read
+uint16_t crc16Update(uint16_t crc, uint8_t a) {
+    int i;
+    crc ^= a;
+    for (i = 0; i < 8; i++) {
+        if (crc & 1) crc = (crc >> 1) ^ 0xA001;
+        else crc = (crc >> 1);
+    }
+    return crc;
+}
+//to read
+bool loadCalibration() {
+	uint8_t buf[EEPROM_CAL_SIZE_BYTES];
+
+	uint16_t crc = 0xFFFF;
+	for (uint16_t a = 0; a < EEPROM_CAL_SIZE_BYTES; a++) {
+		buf[a] = EEPROM.read(a + EEPROM_CAL_ADDR);
+		crc = crc16Update(crc, buf[a]);
+	}
+
+	if (crc != 0 || buf[0] != EEPROM_CAL_ID_0 || buf[1] != EEPROM_CAL_ID_1) 
+		return false;	
 
 
-void setup() {
-	stm.begin("strain", IPAddress(192, 168, 42, 105), new ModuleCallbacks());
-	//stm.subscribe("sensor/strain0/calibration");
-	hx.begin(HX711_DOUT_PIN,HX711_SCK_PIN);	
-	//iscrizione serve solo per la ricezione di dati
-	
-	//default_offset=hx.get_units(LOADCELL_NUM_READING);
+	long offset;
+	//divider=scale
+	float scale;
+	memcpy(&offset, buf + 2, sizeof(offset));
+	memcpy(&scale,buf+2+sizeof(offset),sizeof(scale));
+	hx.set_offset(offset);
+	hx.set_scale(scale);
+
+	return true;
 }
 
-void loop() {
-	if(!cal_status){
-		calibration(36.1,60);
-		cal_status=true;
+
+bool saveCalibration() {
+
+	uint8_t buf[EEPROM_CAL_SIZE_BYTES];
+	memset(buf, 0, EEPROM_CAL_SIZE_BYTES);
+	buf[0] = EEPROM_CAL_ID_0;
+	buf[1] = EEPROM_CAL_ID_1;
+
+	long offset=hx.get_offset();
+	float scale=hx.get_scale();
+	memcpy(buf+2,&offset,sizeof(offset));
+	memcpy(buf+2+sizeof(offset),&scale,sizeof(scale));
+
+	uint16_t crc = 0xFFFF;
+	for (uint16_t i = 0; i < EEPROM_CAL_SIZE_BYTES - 2; i++) 
+		crc = crc16Update(crc, buf[i]);
+	buf[EEPROM_CAL_SIZE_BYTES - 2] = crc & 0xFF;
+	buf[EEPROM_CAL_SIZE_BYTES - 1] = crc >> 8;
+
+	for (uint16_t a = 0; a < EEPROM_CAL_SIZE_BYTES; a++) 
+		EEPROM.write(a + EEPROM_CAL_ADDR, buf[a]);
+
+	EEPROM.commit();
+	
+	return true;
+}
+
+
+bool calibrate(float calLoad, int calScaleDelay){
+	if(!calLoad) return false;
+	
+	//setting tare
+	for(int i=0;i<(1000*CAL_TARE_DELAY_S)/(2*CAL_TARE_LED_DELAY_MS);i++){		
+		digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
+		delay(CAL_TARE_LED_DELAY_MS);
+		digitalWrite(STM_NOTIFICATION_LED_PIN, HIGH);
+		delay(CAL_TARE_LED_DELAY_MS);
 	}
-	//else
-		//altrimenti leggo i dati dall'amp e li spedisco nel relativo topic
-		//read_data();
+	hx.tare(CAL_NUM_READINGS);
+	//setting scale
+	for(int i=0;i<(1000*calScaleDelay)/(2*CAL_SCALE_LED_DELAY_MS);i++){		
+		digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
+		delay(CAL_SCALE_LED_DELAY_MS);
+		digitalWrite(STM_NOTIFICATION_LED_PIN, HIGH);
+		delay(CAL_SCALE_LED_DELAY_MS);
+	}
+	double reading=hx.get_value(CAL_NUM_READINGS);
+	//set new tare
+	hx.set_scale(reading/calLoad);
+	return saveCalibration();
 }
 void read_data(){	
 	TickType_t lastWakeTime = xTaskGetTickCount();
-	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;
-	long reading = hx.get_units(LOADCELL_NUM_READING);
-	doc["raw_data"]=reading;
-	int load=(reading-default_offset)/DEFAULT_DIVIDER;
-	//int load=(reading-reading)/DEFAULT_DIVIDER;
-	doc["load_kg"]=load;
-	doc["load_newton"]=load*g;
-	doc["offset"]=DEFAULT_OFFSET;
-	doc["divider"]=DEFAULT_DIVIDER;	
+	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;	
+	doc["raw"]=hx.read_average(HX711_NUM_READING);
+	doc["load"]=hx.get_units(HX711_NUM_READING);
 	stm.publish("sensor/strain0", doc.as<JsonObjectConst>());	
 	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(LOOP_TASK_INTERVAL_MS));
 }
-void writeMemory(){
-	EEPROM.begin(EEPROM_SIZE);
-}
-void calibration(int load_kg, int cal_time){
-	TickType_t lastWakeTime = xTaskGetTickCount();
-	int divider,load;
-	long reading, offset;	
-	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> cal;
-	hx.set_scale();
-	hx.tare();
-	//offset is the average value now measured
-	offset=hx.get_units(LOADCELL_NUM_READING);
-	//initiate calibration
-	digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
 
-	//time to attach the loadcell to the shroud
-	delay(cal_time);
-	digitalWrite(STM_NOTIFICATION_LED_PIN, HIGH);
-	//takes the average based on 10 reading
-	reading = hx.get_units(LOADCELL_NUM_READING);
-	if(load_kg==0){
-		load=0;
-		offset=0;
-		divider=0;
+void setup() {
+	stm.begin("strain", IPAddress(192, 168, 42, 105), new ModuleCallbacks());	
+	hx.begin(HX711_DOUT_PIN, HX711_SCK_PIN);
+	EEPROM.begin(EEPROM_ALLOC_SIZE_BYTES);
+	loadCalibration();
+	stm.subscribe("sensor/strain0/calibration");
+
+}
+
+void loop() {
+	
+	if(calibration){
+		if(calibrate(calibrationLoad,calibrationScaleDelay)){
+			calibration=false;
+			calibrationTries=CAL_NUM_TRIES;
+		}
+		else
+			{
+				for(int i=0;i<3;i++){
+					digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
+					delay(CAL_ERROR_LED_DELAY_MS);
+					digitalWrite(STM_NOTIFICATION_LED_PIN, HIGH);
+					delay(CAL_ERROR_LED_DELAY_MS);
+				}
+				if(calibrationTries--){
+					calibration=false;
+					calibrationTries=CAL_NUM_TRIES;
+				}									
+				delay(CAL_TRIES_DELAY_MS);
+			}
 	}
 	else
-	{
-	divider=reading/load_kg;
-	log_printf("Divider: %ld/%.1f=%.3f\n", reading, load_kg, divider);
-	hx.set_scale(divider);
-	load=(reading-offset)/divider;
-	}	
+		read_data();
 	
-	//data measured by the loadcell
-	cal["raw_data"]=reading;
-	//it gives the weight measured
-	cal["load_kg"]=load;
-	cal["load_newton"]=load*g;
-	//calibration factor 
-	cal["offset"]=offset;
-	cal["divider"]=divider;	
-	stm.publish("sensor/strain0/calibration", cal.as<JsonObjectConst>());
-	//cal_status=true;
-	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(LOOP_TASK_INTERVAL_MS));
 }
