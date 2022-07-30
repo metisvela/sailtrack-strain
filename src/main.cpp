@@ -19,11 +19,6 @@
 #define HX711_SCK_PIN				27
 #define HX711_NUM_READING			1
 
-// TODO: Adjust value
-//taken from grafana, so no more
-//#define LOADCELL_BASE_LOAD_KG		36.1 
-//passed by grafana if different
-
 #define LOOP_TASK_INTERVAL_MS		1000 / MQTT_PUBLISH_FREQ_HZ
 
 #define EEPROM_ALLOC_SIZE_BYTES		512
@@ -35,7 +30,7 @@
 #define CAL_TARE_DELAY_S			10
 #define CAL_NUM_READINGS			10
 #define	CAL_SCALE_DELAY_S			10
-#define CAL_TARE_LED_DELAY_MS		500
+#define CAL_TARE_LED_DELAY_MS		700
 #define CAL_SCALE_LED_DELAY_MS		200
 #define CAL_NUM_TRIES				5
 #define CAL_TRIES_DELAY_MS			500
@@ -60,9 +55,9 @@ class ModuleCallbacks: public SailtrackModuleCallbacks {
 		battery["voltage"] = 2 * avg / BATTERY_ADC_RESOLUTION * BATTERY_ESP32_REF_VOLTAGE * BATTERY_ADC_REF_VOLTAGE;
 	}
 	//parso il json per prendere peso e tempo per la calibrazione
-	void onMqttMessage(const char * topic,JsonObject payload) {
-		calibrationLoad=payload["calibrationLoad"];
-		calibrationScaleDelay=payload["calibrationScaleDelay"]?payload["calibrationScaleDelay"]:CAL_SCALE_DELAY_S;
+	void onMqttMessage(const char * topic, JsonObjectConst message) {
+		calibrationLoad=message["calibrationLoad"];
+		calibrationScaleDelay=message["calibrationScaleDelay"]?message["calibrationScaleDelay"]:CAL_SCALE_DELAY_S;
 		calibration=true;
 	}
 
@@ -131,8 +126,8 @@ bool saveCalibration() {
 
 
 bool calibrate(float calLoad, int calScaleDelay){
+	//if zero return false
 	if(!calLoad) return false;
-	
 	//setting tare
 	for(int i=0;i<(1000*CAL_TARE_DELAY_S)/(2*CAL_TARE_LED_DELAY_MS);i++){		
 		digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
@@ -141,7 +136,7 @@ bool calibrate(float calLoad, int calScaleDelay){
 		delay(CAL_TARE_LED_DELAY_MS);
 	}
 	hx.tare(CAL_NUM_READINGS);
-	//setting scale
+	//setting scale	
 	for(int i=0;i<(1000*calScaleDelay)/(2*CAL_SCALE_LED_DELAY_MS);i++){		
 		digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
 		delay(CAL_SCALE_LED_DELAY_MS);
@@ -168,7 +163,6 @@ void setup() {
 	EEPROM.begin(EEPROM_ALLOC_SIZE_BYTES);
 	loadCalibration();
 	stm.subscribe("sensor/strain0/calibration");
-
 }
 
 void loop() {
