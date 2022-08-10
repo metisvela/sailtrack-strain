@@ -35,6 +35,7 @@
 #define CAL_NUM_TRIES				5
 #define CAL_TRIES_DELAY_MS			500
 #define CAL_ERROR_LED_DELAY_MS		150		
+#define CAL_ERROR_BLINKING_TIMES 	3
 // ------------------------------------------------------------------- //
 
 SailtrackModule stm;
@@ -124,11 +125,30 @@ bool saveCalibration() {
 	return true;
 }
 
-
+/**
+ * @brief This function set the tare and scale value based on the given load,
+ * passed by the parameter calLoad
+ * 
+ * @details The function starts by checking whether the passed parameter is zero or not.
+ * The first blinking carried out onto the onboard led, is necessary to tell the user
+ * that the setting tare block is ongoing.
+ * The second blinking is used for the setting scale procedure.
+ * Tare blinking and scale blinking are performed at different speed.
+ * Lastly, the two values are stored into the EEPROM memory of the ESP32 micro-controller.
+ * 
+ * @param calLoad is the value used for calibrating the load cell.
+ * 
+ * @param calScaleDelay refers to the time necessary to attach the load cell.
+ * to the shroud
+ * 
+ * @return true if the calibration process terminates correctly.
+ * 
+ * @return false if the are some problems with calibration procedure.
+ */
 bool calibrate(float calLoad, int calScaleDelay){
 	//if zero return false
 	if(!calLoad) return false;
-	//setting tare
+	//set tare
 	for(int i=0;i<(1000*CAL_TARE_DELAY_S)/(2*CAL_TARE_LED_DELAY_MS);i++){		
 		digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
 		delay(CAL_TARE_LED_DELAY_MS);
@@ -136,7 +156,7 @@ bool calibrate(float calLoad, int calScaleDelay){
 		delay(CAL_TARE_LED_DELAY_MS);
 	}
 	hx.tare(CAL_NUM_READINGS);
-	//setting scale	
+	//set scale	
 	for(int i=0;i<(1000*calScaleDelay)/(2*CAL_SCALE_LED_DELAY_MS);i++){		
 		digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
 		delay(CAL_SCALE_LED_DELAY_MS);
@@ -148,7 +168,15 @@ bool calibrate(float calLoad, int calScaleDelay){
 	hx.set_scale(reading/calLoad);
 	return saveCalibration();
 }
-void read_data(){	
+/**
+ * @brief The readData is responsible for publishing the raw and load data of
+ * the load cell.
+ * 
+ * @details This function creates a new Json object, useful to store the raw reading from
+ * the load cell and the actual load calculated by the load cell.
+ * At the end the Json object is published in the sensor/strain0 topic. 
+ */
+void readData(){	
 	TickType_t lastWakeTime = xTaskGetTickCount();
 	StaticJsonDocument<STM_JSON_DOCUMENT_MEDIUM_SIZE> doc;	
 	doc["raw"]=hx.read_average(HX711_NUM_READING);
@@ -156,15 +184,29 @@ void read_data(){
 	stm.publish("sensor/strain0", doc.as<JsonObjectConst>());	
 	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(LOOP_TASK_INTERVAL_MS));
 }
-
+/**
+ * @brief brief description Setup function is used to initiliaze the system.
+ * 
+ * @details The following procedures are executed:
+ * The operation amplifier are set with the hx.begin() function.
+ * EEPROM size used to store the data is set with EEPROM.begin().
+ * The system loads the previous calibration stored in the EEPROM memory.
+ * It subscribes to the sensor/strain0/calibration topic,
+ *  to be able to receive from that topic.
+ */
 void setup() {
-	stm.begin("strain", IPAddress(192, 168, 42, 105), new ModuleCallbacks());	
+	stm.begin("strain", IPAddress(192, 168, 42, 105), new ModuleCallbacks());
 	hx.begin(HX711_DOUT_PIN, HX711_SCK_PIN);
 	EEPROM.begin(EEPROM_ALLOC_SIZE_BYTES);
 	loadCalibration();
 	stm.subscribe("sensor/strain0/calibration");
 }
-
+/**
+ * @brief Loop performs the calibration process or the reading data process.
+ * 
+ * @details 
+ * 
+ */
 void loop() {
 	
 	if(calibration){
@@ -174,7 +216,7 @@ void loop() {
 		}
 		else
 			{
-				for(int i=0;i<3;i++){
+				for(int i=0;i<CAL_ERROR_BLINKING_TIMES;i++){
 					digitalWrite(STM_NOTIFICATION_LED_PIN, LOW);
 					delay(CAL_ERROR_LED_DELAY_MS);
 					digitalWrite(STM_NOTIFICATION_LED_PIN, HIGH);
@@ -187,7 +229,8 @@ void loop() {
 				delay(CAL_TRIES_DELAY_MS);
 			}
 	}
-	else
-		read_data();
+	else{
+		readData();
+	}		
 	
 }
