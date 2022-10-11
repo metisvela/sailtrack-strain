@@ -48,7 +48,7 @@ Once the firmware is uploaded the module can work with the SailTrack system. Whe
 
 ## Contributing
 
-Pull requests are welcome. For major changes, please [open an issue](https://github.com/metis-vela-unipd/sailtrack-strain/issues/new) first to discuss what you would like to change.
+Contributors are welcome. If you are a student of the University of Padua, please apply for the Métis Vela Unipd team in the [website](http://metisvela.dii.unipd.it), specifying in the appliaction form that you are interested in contributing to the SailTrack Project. If you are not a student of the University of Padua, feel free to open Pull Requests and Issues to contribute to the project.
 
 ## License
 
