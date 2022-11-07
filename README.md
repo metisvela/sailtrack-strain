@@ -20,7 +20,9 @@ The module performs the following tasks:
 <p align="center">
   <br/>
   <img src="hardware/Connection Diagram.svg">
+  <img src="hardware/Module Image.jpg">
 </p>
+  
 ![module-image](hardware/Module%20Image.jpg)
 ## Installation
 
