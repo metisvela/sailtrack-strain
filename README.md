@@ -23,7 +23,6 @@ The module performs the following tasks:
   <img src="hardware/Module Image.jpg">
 </p>
   
-![module-image](hardware/Module%20Image.jpg)
 ## Installation
 
 Follow the instructions below to get the SailTrack Strain firmware correctly installed. If you encounter any problem, please [open an issue](https://github.com/metis-vela-unipd/sailtrack-strain/issues/new).
