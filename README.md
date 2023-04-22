@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/metis-vela-unipd/sailtrack-docs/main/Assets/SailTrack%20Logo.svg" width="180">
+  <img src="https://raw.githubusercontent.com/metis-vela-unipd/sailtrack/main/Assets/SailTrack%20Logo.svg" width="180">
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
 
 # SailTrack Strain
 
-SailTrack Strain is a component of the SailTrack system, it manages load cells mounted on the boat maneuvers, providing load and stress information about them. To learn more about the SailTrack project, please visit the [documentation repository](https://github.com/metis-vela-unipd/sailtrack-docs).
+SailTrack Strain is a component of the SailTrack system, it manages load cells mounted on the boat maneuvers, providing load and stress information about them. To learn more about the SailTrack project, please visit the [project repository](https://github.com/metis-vela-unipd/sailtrack).
 
 The SailTrack Strain module is based on a battery powered LilyGo TTGO T7, consisting of an [ESP32](https://www.espressif.com/en/products/socs/esp32) microcontroller, connected to an Operational Amplifier breakout board connected to a load cell, mounted "in parallel" to the boat shroud. For a more detailed hardware description of the module, please refer to the [Bill Of Materials](hardware/BOM.csv). The 3D-printable enclosure con be found [here](hardware/STL).
 
@@ -54,6 +54,4 @@ Contributors are welcome. If you are a student of the University of Padua, pleas
 
 ## License
 
-Copyright © 2022, [Métis Vela Unipd](https://github.com/metis-vela-unipd). SailTrack Strain is available under the [GPL-3.0 license](https://www.gnu.org/licenses/gpl-3.0.en.html). See the LICENSE file for more info.
-
-
+Copyright © 2023, [Métis Vela Unipd](https://github.com/metis-vela-unipd). SailTrack Strain is available under the [GPL-3.0 license](https://www.gnu.org/licenses/gpl-3.0.en.html). See the LICENSE file for more info.
