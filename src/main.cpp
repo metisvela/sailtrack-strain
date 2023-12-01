@@ -132,7 +132,6 @@ uint16_t crc16Update(uint16_t crc, uint8_t a) {
  */
 bool loadCalibration() {
 	uint8_t buf[EEPROM_CAL_SIZE_BYTES];
-
 	uint16_t crc = 0xFFFF;
 	for (uint16_t a = 0; a < EEPROM_CAL_SIZE_BYTES; a++) {
 		buf[a] = EEPROM.read(a + EEPROM_CAL_ADDR);
@@ -232,7 +231,7 @@ bool calibrate(float calLoad, int calScaleDelay){
 		delay(CAL_SCALE_LED_DELAY_MS);
 	}
 	double reading=hx.get_value(CAL_NUM_READINGS);
-	//set new tare
+	//set new scale
 	hx.set_scale(reading/calLoad);
 	return saveCalibration();
 }
