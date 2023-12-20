@@ -54,6 +54,6 @@ Contributors are welcome. If you are a student of the University of Padua, pleas
 
 ## License
 
-Copyright © 2022, [Métis Vela Unipd](https://github.com/metis-vela-unipd). SailTrack Strain is available under the [GPL-3.0 license](https://www.gnu.org/licenses/gpl-3.0.en.html). See the LICENSE file for more info.
+Copyright © 2023, [Métis Vela Unipd](https://github.com/metis-vela-unipd). SailTrack Strain is available under the [GPL-3.0 license](https://www.gnu.org/licenses/gpl-3.0.en.html). See the LICENSE file for more info.
 
 
