@@ -1,14 +1,13 @@
-## Strain Calibration
+# Strain Calibration
 
 This README provides instructions for calibrating the Strain sensor using the shrouds of a rigged boat using a Python script.
 
-# Prerequisites
+## Prerequisites
+* Python installed on your system.
+* Both strain_left sand strain_right sensors.
+* Access to the shrouds of the rigged boat.
 
-    Python installed on your system.
-    Both strain_left sand strain_right sensors.
-    Access to the shrouds of the rigged boat.
-
-# Calibration Procedure
+## Calibration Procedure
 * Set the right python interpreter with the right dependencies.
 * Before proceeding further, it is crucial to allow the sensor to rest without applying any tension. This ensures accurate baseline measurements.
 * Run the Python Script: Execute the Python script provided in the repository.
