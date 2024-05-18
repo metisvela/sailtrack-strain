@@ -20,7 +20,7 @@ try:
     detach_time = input("Insert train attach operation time:")
     mqtt.publish("sensor/strainRight/calibration", json.dumps({
     "calibrationLoad": shroud_load,
-    "calibrationnScaleDelay": detach_time
+    "calibrationScaleDelay": detach_time
     }))
     print("Calibration procedure on: setting zero tension")
     sleep(int(detach_time))
@@ -32,7 +32,7 @@ try:
     detach_time = input("Insert train detach operation time:")
     mqtt.publish("sensor/strainLeft/calibration", json.dumps({
     "calibrationLoad": shroud_load,
-    "calibrationnScaleDelay": detach_time
+    "calibrationScaleDelay": detach_time
     }))
     print("Calibration procedure on: setting zero tension")
     sleep(int(detach_time))
