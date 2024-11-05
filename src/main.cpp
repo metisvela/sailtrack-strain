@@ -22,10 +22,10 @@
 #define LOOP_TASK_INTERVAL_MS		100
 
 //Quadratic intrapolation like: load = A*measure^3+B*measure^2+C*measure+D
-#define A                           0
-#define B                           2.3008880046
-#define C                           -1365.9396282640
-#define D                           37538.3624881730
+#define A                           0.0000000000000
+#define B                           0.0000000024
+#define C                           -0.0007927029
+#define D                           26.7119099998
 // ------------------------------------------------------------------- //
 
 SailtrackModule stm;
@@ -54,14 +54,13 @@ void mqttTask(void * pvArguments) {
 		JsonObject euler = doc.createNestedObject("tension");
 		euler["load"] = load;
 
-		stm.publish("sensor/imu0", doc.as<JsonObjectConst>());
-
+		stm.publish("sensor/strain0", doc.as<JsonObjectConst>());
 		vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(MQTT_TASK_INTERVAL_MS));
 	}
 }
 
 long measureToLoad(long measure){
-    long load = -1;
+    long load = -999999;
     load = A*measure*measure*measure+B*measure*measure+C*measure+D;
     return load;
 }
