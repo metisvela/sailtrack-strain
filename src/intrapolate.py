@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 
 # Simulated data (replace with your own CSV import if needed)
 data = {
-    'measure': [38680, -38000, -56000, -64000, -90000, -115000, -130000],
-    'load': [0, 60, 75, 90, 120, 150, 170]
+    'measure': [-280000, -331000, -386000, -410000],
+    'load': [0, 36, 88, 117]
 }
 
 # Create a DataFrame from the data
@@ -19,7 +19,7 @@ measure = df['measure']
 load = df['load']
 
 # Create an array of x values for interpolation, spanning the range of your measure values
-x = np.linspace(measure.min(), measure.max(), 800)
+x = np.linspace(measure.min()-100000, measure.max()+2000, 800)
 
 # Linear interpolation
 linear_coeffs = np.polyfit(measure, load, 1)
